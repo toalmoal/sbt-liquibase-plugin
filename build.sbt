@@ -1,3 +1,4 @@
+import xerial.sbt.Sonatype._
 import ReleaseTransformations._
 
 lazy val buildSettings = Seq(
@@ -23,6 +24,7 @@ lazy val buildSettings = Seq(
   publishMavenStyle := true,
   licenses := Seq("APL2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt")),
   homepage := Some(url("https://github.com/toalmoal/sbt-liquibase-plugin")),
+  sonatypeProjectHosting := Some(GitHubHosting("toalmoal", "sbt-liquibase-plugin", "support@toalmoal.com")),
   scmInfo := Some(
     ScmInfo(
       url("https://github.com/toalmoal/sbt-liquibase-plugin"),
@@ -32,12 +34,9 @@ lazy val buildSettings = Seq(
   developers := List(
     Developer(id="ydubey", name="Yogesh Dubey", email="ydubey@toalmoal.com", url=url("https://www.toalmoal.com"))
   ),
-  publishTo := Some(
-  if (isSnapshot.value)
-    Opts.resolver.sonatypeSnapshots
-  else
-    Opts.resolver.sonatypeStaging
-  ),
+  sonatypeCredentialHost := "s01.oss.sonatype.org",
+  sonatypeRepository := "https://s01.oss.sonatype.org/service/local",
+  publishTo := sonatypePublishToBundle.value,
   releaseProcess := Seq[ReleaseStep](
     checkSnapshotDependencies,
     inquireVersions,
