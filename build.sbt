@@ -60,5 +60,6 @@ lazy val sbtLiquibase = Project(
 .enablePlugins(ScriptedPlugin)
 .settings(buildSettings)
 .settings(
-  libraryDependencies += "org.liquibase" % "liquibase-core" % "4.9.0"
+  libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.10",
+  libraryDependencies += "org.liquibase" % "liquibase-core" % "4.9.1"
 )
