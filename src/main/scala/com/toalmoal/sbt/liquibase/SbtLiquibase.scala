@@ -1,4 +1,4 @@
-package com.toalmoal.sbtliquibase
+package com.toalmoal.sbt.liquibase
 
 import java.net.URLClassLoader
 import java.text.SimpleDateFormat
@@ -70,9 +70,9 @@ object SbtLiquibase extends AutoPlugin {
 
   val autoImport: Import.type = Import
 
-  val dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+  private val dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 
-  lazy val DateParser = mapOrFail(StringBasic) { date =>
+  private lazy val DateParser = mapOrFail(StringBasic) { date =>
     dateFormat.parse(date)
   }
 
@@ -91,7 +91,19 @@ object SbtLiquibase extends AutoPlugin {
 
   override def projectSettings: Seq[Setting[_]] = liquibaseBaseSettings(Compile) ++ inConfig(Test)(liquibaseBaseSettings(Test))
 
-  def liquibaseBaseSettings(conf: Configuration): Seq[Setting[_]] = {
+  private def liquibaseBaseSettings(conf: Configuration): Seq[Setting[_]] = {
+
+    lazy val rootLoader: ClassLoader = {
+      @tailrec
+      def parent(loader: ClassLoader): ClassLoader = {
+        val p = loader.getParent
+        if (p eq null) loader else parent(p)
+      }
+
+      val systemLoader = ClassLoader.getSystemClassLoader
+      if (systemLoader ne null) parent(systemLoader)
+      else parent(getClass.getClassLoader)
+    }
 
     def withinScope[T](resourceAccessor: ResourceAccessor, classLoader: ClassLoader)(f: => T): T = {
       val attributes = Map(
@@ -116,31 +128,20 @@ object SbtLiquibase extends AutoPlugin {
       liquibaseSqlOutputFile := Some(file("liquibase-out.sql")),
 
       liquibaseResourceAccessor := {
-        lazy val rootLoader: ClassLoader = {
-          @tailrec
-          def parent(loader: ClassLoader): ClassLoader = {
-            val p = loader.getParent
-            if (p eq null) loader else parent(p)
-          }
-
-          val systemLoader = ClassLoader.getSystemClassLoader
-          if (systemLoader ne null) parent(systemLoader)
-          else parent(getClass.getClassLoader)
-        }
-
-        withinScope(new FileSystemResourceAccessor(), rootLoader) {
+        Try(LiqubaseScope.getCurrentScope)
+        withinScope(new ClassLoaderResourceAccessor(getClass.getClassLoader), rootLoader) {
           val rootFolders = FileSystems.getDefault.getRootDirectories.asScala.map(_.toFile).toSeq
-          val fsAccessor = new FileSystemResourceAccessor(rootFolders: _*)
-          val loader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), rootLoader)
+          val fsAccessors = rootFolders.map(new DirectoryResourceAccessor(_))
+          val loader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), rootLoader)
           val clAccessor = new ClassLoaderResourceAccessor(loader)
           val pluginClAccessor = new ClassLoaderResourceAccessor(getClass.getClassLoader)
-          new CompositeResourceAccessor(fsAccessor, clAccessor, pluginClAccessor)
+          new CompositeResourceAccessor(fsAccessors ++ Seq(clAccessor, pluginClAccessor): _*)
         }
       },
 
       liquibaseInstance := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         def database() = CommandLineUtils.createDatabaseObject(
             resourceAccessor,
@@ -166,14 +167,14 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseUpdate := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) { liquibaseInstance.value().execAndClose(_.update(liquibaseContext.value)) }
       },
 
       liquibaseUpdateSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose(_.update(liquibaseContext.value, outputWriter.value))
@@ -182,7 +183,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseStatus := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose {
@@ -193,7 +194,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseClearChecksums := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose(_.clearCheckSums())
@@ -202,7 +203,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseListLocks := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose(_.reportLocks(new PrintStream(System.out)))
@@ -211,7 +212,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseReleaseLocks := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose(_.forceReleaseLocks())
@@ -220,7 +221,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseValidateChangelog := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose(_.validate())
@@ -229,7 +230,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseDbDoc := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           {
@@ -242,7 +243,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollback := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val tag = token(Space ~> StringBasic, "<tag>").parsed
@@ -253,7 +254,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollbackCount := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val count = token(Space ~> IntBasic, "<count>").parsed
@@ -264,7 +265,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollbackSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val tag = token(Space ~> StringBasic, "<tag>").parsed
@@ -276,7 +277,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollbackCountSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val count = token(Space ~> IntBasic, "<count>").parsed
@@ -288,7 +289,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollbackToDate := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val date = token(Space ~> DateParser, "<date/time>").parsed
@@ -298,7 +299,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseRollbackToDateSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val date = token(Space ~> DateParser, "<date/time>").parsed
@@ -310,7 +311,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseFutureRollbackSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose {
@@ -321,7 +322,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseTag := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           val tag = token(Space ~> StringBasic, "<tag>").parsed
@@ -332,7 +333,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseChangelogSyncSql := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) {
           liquibaseInstance.value().execAndClose {
@@ -343,7 +344,7 @@ object SbtLiquibase extends AutoPlugin {
 
       liquibaseDropAll := {
         val resourceAccessor: ResourceAccessor = liquibaseResourceAccessor.value
-        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (dependencyClasspath in conf).value.map(_.data)), getClass.getClassLoader)
+        val classLoader = new URLClassLoader(Path.toURLs(liquibaseDataDir.value +: (conf / dependencyClasspath).value.map(_.data)), getClass.getClassLoader)
 
         withinScope(resourceAccessor, classLoader) { liquibaseInstance.value().execAndClose(_.dropAll()) }
       }

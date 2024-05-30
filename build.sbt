@@ -5,7 +5,7 @@ lazy val buildSettings = Seq(
   organization := "com.toalmoal",
   organizationName := "ToalMoal Private Ltd.",
   organizationHomepage := Some(new URL("https://toalmoal.com")),
-  publishArtifact in Test := false,
+  Test / publishArtifact := false,
   sbtPlugin := true,
   scalacOptions ++= Seq("-encoding", "UTF-8", "-deprecation", "-unchecked"),
   scriptedBufferLog := false,
@@ -16,7 +16,7 @@ lazy val buildSettings = Seq(
   crossSbtVersions := Vector("0.13.16"),
   releaseCrossBuild := true,
   releaseTagName := {
-    (version in ThisBuild).value
+    (ThisBuild / version).value
   },
   parallelExecution := true,
 
@@ -60,6 +60,6 @@ lazy val sbtLiquibase = Project(
 .enablePlugins(ScriptedPlugin)
 .settings(buildSettings)
 .settings(
-  libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.10",
-  libraryDependencies += "org.liquibase" % "liquibase-core" % "4.9.1"
+  libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.4.12",
+  libraryDependencies += "org.liquibase" % "liquibase-core" % "4.27.0"
 )
