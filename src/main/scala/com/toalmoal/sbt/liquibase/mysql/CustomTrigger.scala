@@ -46,16 +46,18 @@ abstract class CustomTrigger extends CustomSqlChange with CustomSqlRollback {
 
   override def validate(database: Database): ValidationErrors = new ValidationErrors()
 
-  protected def triggerSql(triggerName: String, operation: String, columns: Set[String]): String =
+  protected def triggerSql(triggerName: String, operation: String, columns: Set[String], deleted: Boolean = false): String = {
+    val columnRef = if (deleted) "OLD" else "NEW"
     s"""CREATE TRIGGER `$triggerName`
        |AFTER $operation
        |ON `${getTableName()}`
        |FOR EACH ROW
        |  BEGIN
-       |    INSERT INTO `${getCopyTableName()}` (`log_time`,
+       |    INSERT INTO `${getCopyTableName()}` (`log_time`, `deleted`,
        |      ${multilineJoin(columns.map(v => s"`$v`").toList.sorted, 200)})
-       |    VALUES (UTC_TIMESTAMP(),
-       |      ${multilineJoin(columns.map(v => s"NEW.`$v`").toList.sorted, 200)});
+       |    VALUES (UTC_TIMESTAMP(), $deleted,
+       |      ${multilineJoin(columns.map(v => s"$columnRef.`$v`").toList.sorted, 200)});
        |END;""".stripMargin
+  }
 
 }

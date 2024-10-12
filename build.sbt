@@ -22,6 +22,7 @@ lazy val buildSettings = Seq(
 
   sonatypeProfileName := "com.toalmoal",
   publishMavenStyle := true,
+  publishTo := sonatypePublishToBundle.value,
   licenses := Seq("APL2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt")),
   homepage := Some(url("https://github.com/toalmoal/sbt-liquibase-plugin")),
   sonatypeProjectHosting := Some(GitHubHosting("toalmoal", "sbt-liquibase-plugin", "support@toalmoal.com")),
@@ -34,8 +35,8 @@ lazy val buildSettings = Seq(
   developers := List(
     Developer(id="ydubey", name="Yogesh Dubey", email="ydubey@toalmoal.com", url=url("https://www.toalmoal.com"))
   ),
-  sonatypeCredentialHost := "s01.oss.sonatype.org",
   sonatypeRepository := "https://s01.oss.sonatype.org/service/local",
+  sonatypeCredentialHost := sonatype01,
   publishTo := sonatypePublishToBundle.value,
   releaseProcess := Seq[ReleaseStep](
     checkSnapshotDependencies,

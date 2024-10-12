@@ -29,3 +29,13 @@
 - liquibase version to 4.27.0
 ### Added
 - MySql custom tasks for auto-generating insert/update/upsert triggers
+
+[2.0.2]: https://github.com/toalmoal/sbt-liquibase-plugin
+
+### Added
+- MySql custom tasks for auto-generating delete triggers
+
+[2.0.3]: https://github.com/toalmoal/sbt-liquibase-plugin
+
+### Added
+- Fix MySql custom tasks for auto-generating delete triggers
